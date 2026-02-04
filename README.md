@@ -34,7 +34,7 @@ A lightweight, terminal-based service manager for Linux systems using systemctl.
 └─────────────────────────┘└────────────────────────────────────────────────┘
 ┌───────────────────────────────────────────────────────────────────────────┐
 │ [A] Add | [S] Start | [R] Restart | [X] Stop | [M] Mask | [U] UnMask      │
-│ [E] Enable | [D] Disable | [Backsp/Del] Delete | [Q] Quit           │
+│ [E] Enable | [D] Disable | [Backsp/Del] Delete | [Q] Quit                 │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
