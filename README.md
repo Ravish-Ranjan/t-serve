@@ -96,14 +96,12 @@ node index.js
 
 Services are stored in `services.db` in the same directory as the application. The file is created automatically with default services (docker, ollama, ssh) on first run.
 
-```
 | |
 |---|
 |docker|
 |nginx|
 |postgresql|
 |redis|
-```
 
 ## How It Works
 
