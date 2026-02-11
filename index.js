@@ -4,11 +4,13 @@ const Database = require("better-sqlite3");
 
 const db = new Database("services.db");
 
-db.prepare(`
+db.prepare(
+	`
 	create table if not exists services(
 		service_id text primary key
 	)
-`).run();
+`,
+).run();
 
 const addService = db.prepare("insert into services (service_id) values (?)");
 const getAllServices = db.prepare("select * from services");
@@ -21,16 +23,29 @@ const screen = blessed.screen({
 
 function loadServices() {
 	let rows = getAllServices.all();
-	if (rows.length == 0){
+	if (rows.length == 0) {
 		addService.run("docker");
 		addService.run("ollama");
 		addService.run("ssh");
-		rows = getAllServices.all()
+		rows = getAllServices.all();
 	}
-	return rows.map(s => s.service_id);
+	return rows.map((s) => s.service_id);
 }
 
-let services = loadServices();
+let allServices = loadServices();
+let services = allServices;
+
+function filterServices(query) {
+	query = query.toLowerCase();
+
+	services = allServices.filter((service) =>
+		service.toLowerCase().includes(query),
+	);
+	list.clearItems();
+	list.setItems(services);
+	list.select(0);
+	screen.render();
+}
 
 const list = blessed.list({
 	parent: screen,
@@ -38,7 +53,7 @@ const list = blessed.list({
 	width: "20%",
 	height: "90%",
 	border: { type: "line" },
-	style: { selected: { bg: "blue", fg: "white" } },
+	style: { selected: { bg: "blue", fg: "black" } },
 	items: services,
 	keys: true,
 	mouse: true,
@@ -64,6 +79,7 @@ const footer = blessed.box({
 	height: "10%",
 	content:
 		" {cyan-fg}[A]{/cyan-fg} Add | " +
+		"{magenta-fg}[F]{/magenta-fg} Find | " +
 		"{green-fg}[S]{/green-fg} Start | " +
 		"{cyan-fg}[R]{/cyan-fg} Restart | " +
 		"{red-fg}[X]{/red-fg} Stop | " +
@@ -96,6 +112,18 @@ const question = blessed.question({
 	height: "shrink",
 	border: { type: "line" },
 	label: " Confirm Action ",
+	hidden: true,
+});
+
+const searchBox = blessed.textbox({
+	parent: screen,
+	top: "center",
+	left: "center",
+	width: "40%",
+	height: 3,
+	border: { type: "line" },
+	label: " Search ",
+	inputOnFocus: true,
 	hidden: true,
 });
 
@@ -166,7 +194,8 @@ inputBox.on("submit", (value) => {
 		if (!services.includes(newService)) {
 			addService.run(newService);
 			list.clearItems();
-			services = getAllServices.all().map(s => s.service_id); 
+			allServices = getAllServices.all().map((s) => s.service_id);
+			services = [...allServices];
 			list.setItems(services);
 		}
 		inputBox.hide();
@@ -187,7 +216,8 @@ screen.key(["delete", "backspace"], () => {
 			if (data) {
 				deleteService.run(serviceName);
 				list.clearItems();
-				services = getAllServices.all().map(s => s.service_id);
+				allServices = getAllServices.all().map((s) => s.service_id);
+				services = [...allServices];
 				list.setItems(services);
 				if (services.length > 0) {
 					list.select(Math.max(0, selectedIndex - 1));
@@ -199,6 +229,41 @@ screen.key(["delete", "backspace"], () => {
 			screen.render();
 		},
 	);
+});
+
+searchBox.on("keypress", () => {
+	setImmediate(() => {
+		const value = searchBox.getValue();
+		if (value.trim() == "") {
+			services = [...allServices];
+			list.clearItems();
+			list.setItems(services);
+		} else filterServices(value);
+	});
+});
+
+searchBox.key("escape", () => {
+	searchBox.hide();
+	searchBox.clearValue();
+
+	services = [...allServices];
+	list.setItems(services);
+	list.focus();
+
+	screen.render();
+});
+
+searchBox.on("submit", () => {
+	const value = searchBox.getValue();
+	searchBox.hide();
+	searchBox.clearValue();
+	let idx = allServices.findIndex((s) => s == value);
+	services = allServices;
+	list.clearItems();
+	list.setItems(services);
+	list.select(Math.max(0, idx));
+	list.focus();
+	screen.render();
 });
 
 screen.key(["a"], () => openInput("Enter Service Name", false, "add"));
@@ -229,6 +294,11 @@ screen.key(["e"], () => {
 screen.key(["d"], () => {
 	pendingAction = "disable";
 	openInput("Enter Password", true, "sudo");
+});
+screen.key(["f"], () => {
+	searchBox.show();
+	searchBox.focus();
+	screen.render();
 });
 screen.key(["q", "C-c"], () => process.exit(0));
 
