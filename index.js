@@ -1,22 +1,33 @@
 const blessed = require("blessed");
 const { exec } = require("child_process");
-const fs = require("fs");
+const Database = require("better-sqlite3");
+
+const db = new Database("services.db");
+
+db.prepare(`
+	create table if not exists services(
+		service_id text primary key
+	)
+`).run();
+
+const addService = db.prepare("insert into services (service_id) values (?)");
+const getAllServices = db.prepare("select * from services");
+const deleteService = db.prepare("delete from services where service_id=?");
 
 const screen = blessed.screen({
 	smartCSR: true,
 	title: "T Serve",
 });
 
-const FILE_PATH = "services.txt";
-
 function loadServices() {
-	if (!fs.existsSync(FILE_PATH))
-		fs.writeFileSync(FILE_PATH, "docker\nollama\nssh");
-	return fs
-		.readFileSync(FILE_PATH, "utf-8")
-		.split("\n")
-		.map((s) => s.trim())
-		.filter(Boolean);
+	let rows = getAllServices.all();
+	if (rows.length == 0){
+		addService.run("docker");
+		addService.run("ollama");
+		addService.run("ssh");
+		rows = getAllServices.all()
+	}
+	return rows.map(s => s.service_id);
 }
 
 let services = loadServices();
@@ -57,7 +68,7 @@ const footer = blessed.box({
 		"{cyan-fg}[R]{/cyan-fg} Restart | " +
 		"{red-fg}[X]{/red-fg} Stop | " +
 		"{blue-fg}[M]{/blue-fg} Mask | " +
-		"{blue-fg}[U]{/blue-fg} UnMask\n " +
+		"{blue-fg}[U]{/blue-fg} UnMask | " +
 		"{magenta-fg}[E]{/magenta-fg} Enable | " +
 		"{magenta-fg}[D]{/magenta-fg} Disable | " +
 		"{red-fg}[Backsp/Del]{/red-fg} Delete | " +
@@ -153,9 +164,9 @@ inputBox.on("submit", (value) => {
 	} else if (mode === "add" && value.trim()) {
 		const newService = value.trim();
 		if (!services.includes(newService)) {
-			services.push(newService);
-			fs.writeFileSync(FILE_PATH, services.join("\n"));
+			addService.run(newService);
 			list.clearItems();
+			services = getAllServices.all().map(s => s.service_id); 
 			list.setItems(services);
 		}
 		inputBox.hide();
@@ -174,9 +185,9 @@ screen.key(["delete", "backspace"], () => {
 		`Are you sure you want to remove ${serviceName}?`,
 		(err, data) => {
 			if (data) {
-				services.splice(selectedIndex, 1);
-				fs.writeFileSync(FILE_PATH, services.join("\n"));
+				deleteService.run(serviceName);
 				list.clearItems();
+				services = getAllServices.all().map(s => s.service_id);
 				list.setItems(services);
 				if (services.length > 0) {
 					list.select(Math.max(0, selectedIndex - 1));

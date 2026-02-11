@@ -1,6 +1,6 @@
 # T Serve
 
-A lightweight, terminal-based service manager for Linux systems using systemctl. Manage your system services with an intuitive TUI (Text User Interface).
+A lightweight, terminal-based service manager for Linux systems using systemctl. Manage your system services with an intuitive TUI (Terminal User Interface).
 
 
 ## Features
@@ -94,21 +94,15 @@ node index.js
 
 ## Configuration
 
-Services are stored in `services.txt` in the same directory as the application. The file is created automatically with default services (docker, ollama, ssh) on first run.
-
-You can manually edit this file to add or remove services:
-
-```bash
-nano services.txt
-```
-
-Each service should be on a new line:
+Services are stored in `services.db` in the same directory as the application. The file is created automatically with default services (docker, ollama, ssh) on first run.
 
 ```
-docker
-nginx
-postgresql
-redis
+| |
+|---|
+|docker|
+|nginx|
+|postgresql|
+|redis|
 ```
 
 ## How It Works
