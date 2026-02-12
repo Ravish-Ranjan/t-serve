@@ -231,13 +231,15 @@ screen.key(["delete", "backspace"], () => {
 	);
 });
 
-searchBox.on("keypress", () => {
+searchBox.on("keypress", (ch,key) => {
+	if (key.name === "escape" || key.name === "enter") return;
 	setImmediate(() => {
 		const value = searchBox.getValue();
 		if (value.trim() == "") {
 			services = [...allServices];
 			list.clearItems();
 			list.setItems(services);
+			screen.render();
 		} else filterServices(value);
 	});
 });
@@ -247,7 +249,9 @@ searchBox.key("escape", () => {
 	searchBox.clearValue();
 
 	services = [...allServices];
+	list.clearItems();
 	list.setItems(services);
+	list.select(0);
 	list.focus();
 
 	screen.render();
@@ -257,8 +261,8 @@ searchBox.on("submit", () => {
 	const value = searchBox.getValue();
 	searchBox.hide();
 	searchBox.clearValue();
-	let idx = allServices.findIndex((s) => s == value);
-	services = allServices;
+	let idx = allServices.findIndex((s) => s.toLowerCase() === value.toLowerCase());
+	services = [...allServices];
 	list.clearItems();
 	list.setItems(services);
 	list.select(Math.max(0, idx));
