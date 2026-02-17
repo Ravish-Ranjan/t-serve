@@ -4,13 +4,7 @@ const Database = require("better-sqlite3");
 
 const db = new Database("services.db");
 
-db.prepare(
-	`
-	create table if not exists services(
-		service_id text primary key
-	)
-`,
-).run();
+db.prepare(`create table if not exists services(service_id text primary key)`).run();
 
 const addService = db.prepare("insert into services (service_id) values (?)");
 const getAllServices = db.prepare("select * from services");

@@ -50,13 +50,13 @@ A lightweight, terminal-based service manager for Linux systems using systemctl.
 ### Install Dependencies
 
 ```bash
-npm install blessed
+npm install
 ```
 
 Or if using yarn:
 
 ```bash
-yarn add blessed
+yarn install
 ```
 
 ### Clone Repository
@@ -94,14 +94,16 @@ node index.js
 
 ## Configuration
 
-Services are stored in `services.db` in the same directory as the application. The file is created automatically with default services (docker, ollama, ssh) on first run.
+Services are stored in `services.db` in the same directory as the application. The file is created automatically on first run.
 
-| |
+`sqlite table`
+|service_id
 |---|
 |docker|
-|nginx|
-|postgresql|
-|redis|
+|ollama|
+|bluetooth|
+|rsync|
+
 
 ## How It Works
 
