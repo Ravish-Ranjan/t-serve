@@ -15,6 +15,7 @@ db.prepare(
 const addService = db.prepare("insert into services (service_id) values (?)");
 const getAllServices = db.prepare("select * from services");
 const deleteService = db.prepare("delete from services where service_id=?");
+const searchServices = db.prepare("select * from services where service_id like ?")
 
 const screen = blessed.screen({
 	smartCSR: true,
@@ -38,9 +39,8 @@ let services = allServices;
 function filterServices(query) {
 	query = query.toLowerCase();
 
-	services = allServices.filter((service) =>
-		service.toLowerCase().includes(query),
-	);
+	services = searchServices.all(`%${query}%`).map(s => s.service_id);
+
 	list.clearItems();
 	list.setItems(services);
 	list.select(0);
