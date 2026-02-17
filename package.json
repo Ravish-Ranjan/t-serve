@@ -1,15 +1,47 @@
 {
-  "name": "t-serve",
-  "version": "1.1.2",
-  "description": "",
+  "name": "@ravishranjan/t-serve",
+  "version": "1.1.3",
+  "description": "A lightweight, terminal-based service manager for Linux systems using systemctl",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "bin": {
+    "t-serve": "./index.js"
+  },
+  "keywords": [
+    "linux",
+    "tui",
+    "systemctl",
+    "service-manager",
+    "terminal",
+    "blessed",
+    "cli"
+  ],
+  "author": {
+    "email": "contact@ravishdev.org",
+    "name": "Ravish Ranjan",
+    "url": "https://github.com/Ravish-Ranjan"
+  },
+  "license": "GPL-2.0",
   "type": "commonjs",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "linux"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ravish-Ranjan/t-serve.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ravish-Ranjan/t-serve/issues"
+  },
+  "homepage": "https://github.com/Ravish-Ranjan/t-serve#readme",
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "blessed": "^0.1.81"

@@ -1,19 +1,16 @@
-# T Serve
+# T-Serve
 
-A lightweight, terminal-based service manager for Linux systems using systemctl. Manage your system services with an intuitive TUI (Terminal User Interface).
+> A lightweight, terminal-based service manager for Linux systems using systemctl.
 
+Manage your system services with an intuitive TUI (Terminal User Interface) — no mouse needed.
 
-## Features
+[![npm version](https://img.shields.io/npm/v/@ravishranjan/t-serve)](https://www.npmjs.com/package/@ravishranjan/t-serve)
+[![License: GPL-2.0](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+[![Platform: Linux](https://img.shields.io/badge/platform-linux-lightgrey)](https://github.com/Ravish-Ranjan/t-serve)
 
-- **Clean Terminal UI** - Beautiful, keyboard-driven interface using blessed
-- **Quick Service Control** - Start, stop, restart services with simple key commands
-- **Real-time Status** - View service status, PID, memory usage at a glance
-- **Service Management** - Enable, disable, mask, and unmask services
-- **Custom Service Lists** - Add and remove services from your watch list
-- **Secure** - Password prompts for sudo operations
-- **Keyboard Shortcuts** - Efficient navigation without touching the mouse
+---
 
-## Screenshots
+## Preview
 
 ```
 ┌─ Services ──────────────┐┌─ Status Output ────────────────────────────────┐
@@ -38,44 +35,54 @@ A lightweight, terminal-based service manager for Linux systems using systemctl.
 └───────────────────────────────────────────────────────────────────────────┘
 ```
 
+---
+
 ## Installation
 
-### Prerequisites
-
-- Node.js >= 12.0.0
-- npm or yarn
-- Linux system with systemd
-- sudo privileges
-
-### Install Dependencies
+### Via npm (recommended)
 
 ```bash
-npm install
+npm install -g @ravishranjan/t-serve
 ```
 
-Or if using yarn:
+Then run it from anywhere:
 
 ```bash
-yarn install
+t-serve
 ```
 
-### Clone Repository
+### Via git (for development)
 
 ```bash
 git clone https://github.com/Ravish-Ranjan/t-serve.git
 cd t-serve
 npm install
-```
-
-## Usage
-
-Run the application:
-
-```bash
 node index.js
 ```
 
-### Keyboard Shortcuts
+---
+
+## Prerequisites
+
+- Node.js >= 16.0.0
+- Linux system with systemd
+- sudo privileges
+
+---
+
+## Features
+
+- **Clean Terminal UI** — keyboard-driven interface built with blessed
+- **Quick Service Control** — start, stop, restart with a single keypress
+- **Real-time Status** — view service status, PID, and memory usage at a glance
+- **Service Management** — enable, disable, mask, and unmask services
+- **Custom Watch List** — add and remove services you care about
+- **Secure** — password prompts for sudo operations, never stored or logged
+- **Mouse-free** — efficient keyboard navigation throughout
+
+---
+
+## Keyboard Shortcuts
 
 | Key | Action | Description |
 |-----|--------|-------------|
@@ -83,79 +90,72 @@ node index.js
 | `s` | Start | Start the selected service |
 | `r` | Restart | Restart the selected service |
 | `x` | Stop | Stop the selected service |
-| `m` | Mask | Mask the selected service |
-| `u` | Unmask | Unmask the selected service |
 | `e` | Enable | Enable the selected service at boot |
 | `d` | Disable | Disable the selected service at boot |
-| `Backsp` or `Del` | Delete | Remove service from watch list (with confirmation) |
-| `↑/↓` | Navigate | Move through the service list |
+| `m` | Mask | Mask the selected service |
+| `u` | Unmask | Unmask the selected service |
+| `Backsp` / `Del` | Delete | Remove service from watch list (with confirmation) |
+| `↑` / `↓` | Navigate | Move through the service list |
 | `Esc` | Cancel | Cancel input dialogs |
-| `q` or `Ctrl+C` | Quit | Exit the application |
+| `q` / `Ctrl+C` | Quit | Exit the application |
 
-## Configuration
-
-Services are stored in `services.db` in the same directory as the application. The file is created automatically on first run.
-
-`sqlite table`
-|service_id
-|---|
-|docker|
-|ollama|
-|bluetooth|
-|rsync|
-
+---
 
 ## How It Works
 
-T Serve uses `systemctl` commands under the hood to manage services:
+T-Serve wraps `systemctl` commands under the hood:
 
-- **Status Display**: Runs `systemctl status <service>` to fetch real-time information
-- **Service Control**: Executes `systemctl start/stop/restart/enable/disable/mask/unmask <service>` with sudo
-- **Password Security**: Uses `sudo -S` to securely handle password input for privileged operations
+- **Status Display** — runs `systemctl status <service>` to fetch real-time info
+- **Service Control** — executes `systemctl start/stop/restart/enable/disable/mask/unmask <service>` with sudo
+- **Data Storage** — service watch list is persisted in a local `services.db` SQLite file, created automatically on first run
+- **Password Security** — uses `sudo -S` to securely handle password input via stdin
+
+---
 
 ## Security Notes
 
 - Passwords are entered via a censored input field (shown as asterisks)
-- Passwords are passed securely to sudo via stdin
-- Passwords are not stored or logged
-- Always verify the service name before performing operations
+- Passwords are passed to sudo via stdin and never stored or logged
+- Always verify the service name before performing destructive operations
+
+---
 
 ## Troubleshooting
 
-### "Command not found: systemctl"
+**"Command not found: systemctl"**  
+T-Serve requires systemd. Make sure you're on a systemd-based distro (Ubuntu 16.04+, Debian 8+, Fedora, Arch, etc.).
 
-This application requires systemd. Ensure you're running on a systemd-based Linux distribution (Ubuntu 16.04+, Debian 8+, Fedora, Arch, etc.).
+**"Permission Denied"**  
+Ensure you have sudo privileges and enter the correct password when prompted.
 
-### Permission Denied
+**"Service Not Found"**  
+Service names must match exactly as they appear in systemd. Run the following to see all available services:
+```bash
+systemctl list-units --type=service
+```
 
-Make sure you have sudo privileges and enter the correct password when prompted.
-
-### Service Not Found
-
-The service name must match exactly as it appears in systemd. Use `systemctl list-units --type=service` to see available services.
+---
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome!
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
+2. Create your feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes (`git commit -m 'Add my feature'`)
+4. Push to the branch (`git push origin feature/my-feature`)
 5. Open a Pull Request
+
+---
 
 ## License
 
-This project is licensed under the GNU GPL2 License - see the [LICENSE](LICENSE) file for details.
+Licensed under the [GNU GPL v2.0](LICENSE).
 
-## Acknowledgments
-
-- Built with [blessed](https://github.com/chjj/blessed) - A high-level terminal interface library for node.js
-- Inspired by the need for a simple, keyboard-driven service manager
+---
 
 ## Author
 
-Project Link: [https://github.com/Ravish-Ranjan/t-serve](https://github.com/Ravish-Ranjan/t-serve)
+**Ravish Ranjan** — [github.com/Ravish-Ranjan](https://github.com/Ravish-Ranjan)
 
----
-If you find this project useful, please consider giving it a star on GitHub!
+If you find this project useful, consider giving it a ⭐ on [GitHub](https://github.com/Ravish-Ranjan/t-serve)!
