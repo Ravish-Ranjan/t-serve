@@ -47,7 +47,7 @@ const list = blessed.list({
 	width: "20%",
 	height: "90%",
 	border: { type: "line" },
-	style: { selected: { bg: "blue", fg: "black" } },
+	style: { selected: { bg: "yellow", fg: "black" } },
 	items: services,
 	keys: true,
 	mouse: true,
