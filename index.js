@@ -1,307 +1,398 @@
-const blessed = require("blessed");
-const { exec } = require("child_process");
-const Database = require("better-sqlite3");
-
-const db = new Database("services.db");
-
-db.prepare(`create table if not exists services(service_id text primary key)`).run();
-
-const addService = db.prepare("insert into services (service_id) values (?)");
-const getAllServices = db.prepare("select * from services");
-const deleteService = db.prepare("delete from services where service_id=?");
-const searchServices = db.prepare("select * from services where service_id like ?")
-
-const screen = blessed.screen({
-	smartCSR: true,
-	title: "T Serve",
-});
-
-function loadServices() {
-	let rows = getAllServices.all();
-	if (rows.length == 0) {
-		addService.run("docker");
-		addService.run("ollama");
-		addService.run("ssh");
-		rows = getAllServices.all();
-	}
-	return rows.map((s) => s.service_id);
-}
+const {
+	screen,
+	list,
+	details,
+	inputBox,
+	question,
+	searchBox,
+} = require("./ui");
+const {
+	loadServices,
+	addService,
+	deleteService,
+	searchServices,
+} = require("./database");
+const {
+	formatBytes,
+	formatNanoseconds,
+	formatCommandError,
+} = require("./formatters");
+const { runSystemctl, getSystemctlShow } = require("./systemd");
 
 let allServices = loadServices();
-let services = allServices;
+let services = [...allServices];
 
-function filterServices(query) {
-	query = query.toLowerCase();
+let statusRequestId = 0;
+let listStatusRequestId = 0;
+let searchDebounceTimer = null;
+const serviceStates = new Map();
+const SERVICE_DIAMOND = "◆";
+let suppressListSelection = false;
 
-	services = searchServices.all(`%${query}%`).map(s => s.service_id);
-
-	list.clearItems();
-	list.setItems(services);
-	list.select(0);
-	screen.render();
+function getSelectedServiceName() {
+	return services[list.selected] || null;
 }
 
-const list = blessed.list({
-	parent: screen,
-	label: " {bold}Services{/bold} ",
-	width: "20%",
-	height: "90%",
-	border: { type: "line" },
-	style: { selected: { bg: "yellow", fg: "black" } },
-	items: services,
-	keys: true,
-	mouse: true,
-	tags: true,
-});
-
-const details = blessed.box({
-	parent: screen,
-	left: "20%",
-	width: "80%",
-	height: "90%",
-	label: " {bold}Status Output{/bold} ",
-	border: { type: "line" },
-	scrollable: true,
-	alwaysScroll: true,
-	tags: true,
-});
-
-const footer = blessed.box({
-	parent: screen,
-	top: "90%",
-	width: "100%",
-	height: "10%",
-	content:
-		" {cyan-fg}[A]{/cyan-fg} Add | " +
-		"{magenta-fg}[F]{/magenta-fg} Find | " +
-		"{green-fg}[S]{/green-fg} Start | " +
-		"{cyan-fg}[R]{/cyan-fg} Restart | " +
-		"{red-fg}[X]{/red-fg} Stop | " +
-		"{blue-fg}[M]{/blue-fg} Mask | " +
-		"{blue-fg}[U]{/blue-fg} UnMask | " +
-		"{magenta-fg}[E]{/magenta-fg} Enable | " +
-		"{magenta-fg}[D]{/magenta-fg} Disable | " +
-		"{red-fg}[Backsp/Del]{/red-fg} Delete | " +
-		"{yellow-fg}[Q]{/yellow-fg} Quit",
-	tags: true,
-	valign: "middle",
-});
-
-const inputBox = blessed.textbox({
-	parent: screen,
-	top: "center",
-	left: "center",
-	width: "40%",
-	height: 3,
-	border: { type: "line" },
-	hidden: true,
-	inputOnFocus: true,
-});
-
-const question = blessed.question({
-	parent: screen,
-	top: "center",
-	left: "center",
-	width: "40%",
-	height: "shrink",
-	border: { type: "line" },
-	label: " Confirm Action ",
-	hidden: true,
-});
-
-const searchBox = blessed.textbox({
-	parent: screen,
-	top: "center",
-	left: "center",
-	width: "40%",
-	height: 3,
-	border: { type: "line" },
-	label: " Search ",
-	inputOnFocus: true,
-	hidden: true,
-});
-
-function getStatus(serviceName) {
+function validateServiceName(serviceName) {
 	if (!serviceName) {
-		details.setContent("");
+		return "Service name cannot be empty.";
+	}
+
+	if (!/^[A-Za-z0-9@._:-]+$/.test(serviceName)) {
+		return "Service name can only contain letters, numbers, and @ . _ : - characters.";
+	}
+
+	return null;
+}
+
+function formatServiceItem(serviceName) {
+	const activeState = serviceStates.get(serviceName);
+	const color = activeState === "active" ? "green-fg" : activeState === "unknown" ? "white-fg" : "red-fg";
+
+	return `{${color}}${SERVICE_DIAMOND}{/} ${serviceName}`;
+}
+
+function renderServiceList(selectedServiceName = getSelectedServiceName()) {
+	suppressListSelection = true;
+
+	try {
+		list.clearItems();
+		list.setItems(services.map(formatServiceItem));
+
+		if (services.length > 0) {
+			const selectedIndex = selectedServiceName
+				? services.findIndex((service) => service === selectedServiceName)
+				: 0;
+
+			list.select(selectedIndex >= 0 ? selectedIndex : 0);
+		} else {
+			details.setContent("{yellow-fg}No services found.{/}");
+		}
+
+		screen.render();
+	} finally {
+		suppressListSelection = false;
+	}
+}
+
+function refreshServiceStatuses(nextServices = services) {
+	if (nextServices.length === 0) {
 		return;
 	}
-	exec(`systemctl status ${serviceName}`, (err, stdout) => {
-		const fullName = (stdout.match(/ - (.*)/) || ["", "Unknown"])[1];
-		const activeMatch = (stdout.match(/Active: (.*)/) || [
-			"",
-			"unknown",
-		])[1];
-		const mainPid = (stdout.match(/Main PID: (\d+)/) || ["", "N/A"])[1];
-		const memory = (stdout.match(/Memory: (.*)/) || ["", "N/A"])[1];
-		const loadedLine = (stdout.match(/Loaded: (.*)/) || ["", ""])[1];
 
-		const isActive = activeMatch.includes("active (running)");
-		const isDisabled = loadedLine.includes("disabled");
-		const isMasked = loadedLine.includes("masked");
+	const requestId = ++listStatusRequestId;
+
+	for (const serviceName of nextServices) {
+		getSystemctlShow(serviceName)
+			.then((status) => {
+				if (requestId !== listStatusRequestId) {
+					return;
+				}
+
+				serviceStates.set(serviceName, status.ActiveState || "unknown");
+				renderServiceList();
+			})
+			.catch(() => {
+				if (requestId !== listStatusRequestId) {
+					return;
+				}
+
+				serviceStates.set(serviceName, "unknown");
+				renderServiceList();
+			});
+	}
+}
+
+function refreshServiceList(nextServices, selectedServiceName = null) {
+	services = [...nextServices];
+	if (selectedServiceName) {
+		renderServiceList(selectedServiceName);
+	} else {
+		renderServiceList();
+	}
+}
+
+async function getStatus(serviceName) {
+	const requestId = ++statusRequestId;
+
+	if (!serviceName) {
+		details.setContent("");
+		screen.render();
+		return;
+	}
+
+	try {
+		const status = await getSystemctlShow(serviceName);
+		const description = status.Description || "Unknown";
+		const activeState = status.ActiveState || "unknown";
+		const subState = status.SubState || "unknown";
+		const unitFileState = status.UnitFileState || "unknown";
+		const mainPid =
+			status.MainPID && status.MainPID !== "0" ? status.MainPID : "N/A";
+		const memory = formatBytes(status.MemoryCurrent);
+		const cpu = formatNanoseconds(status.CPUUsageNSec);
+		const tasks = status.TasksCurrent || "N/A";
+		const fragmentPath = status.FragmentPath || "N/A";
+		const activeColor = activeState === "active" ? "green-fg" : "red-fg";
+
+		serviceStates.set(serviceName, activeState);
 
 		const content = [
-			`{bold}${serviceName}{/bold} - ${fullName}`,
-			`Active   : ${isActive ? "{green-fg}" : "{red-fg}"}${activeMatch}{/}`,
-			`Disabled : ${isDisabled ? "{red-fg}yes{/}" : "{green-fg}no{/}"}`,
-			`Masked   : ${isMasked ? "{red-fg}yes{/}" : "{green-fg}no{/}"}`,
+			`{bold}${serviceName}{/bold} - ${description}`,
+			`Active   : {${activeColor}}${activeState}{/}${subState ? ` (${subState})` : ""}`,
+			`Enabled  : ${unitFileState.startsWith("enabled") ? "{green-fg}yes{/}" : "{red-fg}no{/}"}`,
+			`Masked   : ${unitFileState.includes("masked") ? "{red-fg}yes{/}" : "{green-fg}no{/}"}`,
 			`Main PID : ${mainPid}`,
 			`Memory   : ${memory}`,
+			`CPU      : ${cpu}`,
+			`Tasks    : ${tasks}`,
+			`Path     : ${fragmentPath}`,
 		].join("\n");
 
+		if (requestId !== statusRequestId) {
+			return;
+		}
+
+		serviceStates.set(serviceName, activeState);
 		details.setContent(content);
+		renderServiceList(serviceName);
+	} catch (error) {
+		if (requestId !== statusRequestId) {
+			return;
+		}
+
+		details.setContent(formatCommandError(serviceName, error));
 		screen.render();
-	});
+	}
 }
 
 let mode = "sudo";
 let pendingAction = null;
 
-const openInput = (label, isCensor, actionType) => {
+function closeInput() {
+	inputBox.hide();
+	inputBox.clearValue();
+	list.focus();
+	screen.render();
+}
+
+function openInput(label, isCensor, actionType) {
 	mode = actionType;
 	inputBox.setLabel(` ${label} `);
 	inputBox.censor = isCensor;
 	inputBox.show();
 	inputBox.focus();
 	screen.render();
-};
+}
 
-inputBox.key(["escape"], () => {
-	inputBox.hide();
-	inputBox.clearValue();
-	list.focus();
-	screen.render();
-});
+inputBox.key(["escape"], closeInput);
 
-inputBox.on("submit", (value) => {
+inputBox.on("submit", async (value) => {
 	if (mode === "sudo") {
 		const selectedService = services[list.selected];
-		const cmd = `echo "${value}" | sudo -S systemctl ${pendingAction} ${selectedService}`;
-		exec(cmd, () => {
-			inputBox.hide();
-			inputBox.clearValue();
-			list.focus();
-			getStatus(selectedService);
-		});
-	} else if (mode === "add" && value.trim()) {
-		const newService = value.trim();
-		if (!services.includes(newService)) {
-			addService.run(newService);
-			list.clearItems();
-			allServices = getAllServices.all().map((s) => s.service_id);
-			services = [...allServices];
-			list.setItems(services);
+		const password = value || "";
+
+		try {
+			if (!selectedService || !pendingAction) {
+				details.setContent(
+					"{red-fg}No service selected for this action.{/}",
+				);
+				screen.render();
+				return;
+			}
+
+			await runSystemctl([pendingAction, selectedService], password);
+			await getStatus(selectedService);
+		} catch (error) {
+			details.setContent(
+				formatCommandError(
+					`${pendingAction} ${selectedService}`,
+					error,
+				),
+			);
+			screen.render();
+		} finally {
+			pendingAction = null;
+			closeInput();
 		}
-		inputBox.hide();
-		inputBox.clearValue();
-		list.focus();
-		screen.render();
+		return;
+	}
+
+	if (mode === "add") {
+		const newService = value.trim();
+		const validationError = validateServiceName(newService);
+
+		if (validationError) {
+			details.setContent(`{red-fg}${validationError}{/}`);
+			screen.render();
+			inputBox.focus();
+			return;
+		}
+
+		if (allServices.includes(newService)) {
+			details.setContent("{red-fg}Service already exists in the watch list.{/}");
+			screen.render();
+			inputBox.focus();
+			return;
+		}
+
+		try {
+			addService(newService);
+			allServices = loadServices();
+			refreshServiceList(allServices, newService);
+			await getStatus(newService);
+		} catch (error) {
+			details.setContent(formatCommandError(`add ${newService}`, error));
+			screen.render();
+		} finally {
+			closeInput();
+		}
 	}
 });
 
 screen.key(["delete", "backspace"], () => {
 	const selectedIndex = list.selected;
 	const serviceName = services[selectedIndex];
-	if (!serviceName) return;
+
+	if (!serviceName) {
+		return;
+	}
 
 	question.ask(
 		`Are you sure you want to remove ${serviceName}?`,
 		(err, data) => {
-			if (data) {
-				deleteService.run(serviceName);
-				list.clearItems();
-				allServices = getAllServices.all().map((s) => s.service_id);
-				services = [...allServices];
-				list.setItems(services);
-				if (services.length > 0) {
-					list.select(Math.max(0, selectedIndex - 1));
-					getStatus(services[list.selected]);
-				} else {
-					details.setContent("{yellow-fg}No services left.{/}");
-				}
+			if (err || !data) {
+				screen.render();
+				return;
 			}
-			screen.render();
+
+			deleteService(serviceName);
+			allServices = loadServices();
+			refreshServiceList(allServices);
+
+			if (services.length > 0) {
+				list.select(Math.max(0, selectedIndex - 1));
+				getStatus(services[list.selected]);
+			}
 		},
 	);
 });
 
-searchBox.on("keypress", (ch,key) => {
-	if (key.name === "escape" || key.name === "enter") return;
-	setImmediate(() => {
+searchBox.on("keypress", (ch, key) => {
+	if (key.name === "escape" || key.name === "enter") {
+		return;
+	}
+
+	if (searchDebounceTimer) {
+		clearTimeout(searchDebounceTimer);
+	}
+
+	searchDebounceTimer = setTimeout(() => {
 		const value = searchBox.getValue();
-		if (value.trim() == "") {
-			services = [...allServices];
-			list.clearItems();
-			list.setItems(services);
-			screen.render();
-		} else filterServices(value);
-	});
+
+		if (value.trim() === "") {
+			refreshServiceList(allServices);
+			return;
+		}
+
+		const filtered = searchServices(value);
+		refreshServiceList(filtered);
+	}, 120);
 });
 
 searchBox.key("escape", () => {
+	if (searchDebounceTimer) {
+		clearTimeout(searchDebounceTimer);
+	}
+
 	searchBox.hide();
 	searchBox.clearValue();
-
-	services = [...allServices];
-	list.clearItems();
-	list.setItems(services);
-	list.select(0);
+	refreshServiceList(allServices);
 	list.focus();
-
-	screen.render();
 });
 
 searchBox.on("submit", () => {
+	if (searchDebounceTimer) {
+		clearTimeout(searchDebounceTimer);
+	}
+
 	const value = searchBox.getValue();
 	searchBox.hide();
 	searchBox.clearValue();
-	let idx = allServices.findIndex((s) => s.toLowerCase() === value.toLowerCase());
-	services = [...allServices];
-	list.clearItems();
-	list.setItems(services);
-	list.select(Math.max(0, idx));
+
+	const index = allServices.findIndex(
+		(service) => service.toLowerCase() === value.toLowerCase(),
+	);
+
+	refreshServiceList(allServices);
+	list.select(Math.max(0, index));
 	list.focus();
 	screen.render();
 });
 
 screen.key(["a"], () => openInput("Enter Service Name", false, "add"));
-screen.key(["s"], () => {
-	pendingAction = "start";
-	openInput("Enter Password", true, "sudo");
-});
-screen.key(["r"], () => {
-	pendingAction = "restart";
-	openInput("Enter Password", true, "sudo");
-});
-screen.key(["x"], () => {
-	pendingAction = "stop";
-	openInput("Enter Password", true, "sudo");
-});
-screen.key(["m"], () => {
-	pendingAction = "mask";
-	openInput("Enter Password", true, "sudo");
-});
-screen.key(["u"], () => {
-	pendingAction = "unmask";
-	openInput("Enter Password", true, "sudo");
-});
-screen.key(["e"], () => {
-	pendingAction = "enable";
-	openInput("Enter Password", true, "sudo");
-});
-screen.key(["d"], () => {
-	pendingAction = "disable";
-	openInput("Enter Password", true, "sudo");
-});
+
+const keyMap = {
+	s: ["start", "Starting"],
+	r: ["restart", "Restarting"],
+	x: ["stop", "Stopping"],
+	m: ["mask", "Masking"],
+	u: ["unmask", "Unmasking"],
+	e: ["enable", "Enabling"],
+	d: ["disable", "Disabling"],
+};
+
+for (const key in keyMap) {
+	if (!Object.hasOwn(keyMap, key)) continue;
+
+	screen.key([key], () => {
+		if (services.length === 0 || list.selected < 0) {
+			details.setContent("{yellow-fg}No service selected.{/}");
+			screen.render();
+			return;
+		}
+
+		pendingAction = keyMap[key][0];
+		openInput(
+			`Enter Password (${keyMap[key][1]} ${services[list.selected]})`,
+			true,
+			"sudo",
+		);
+	});
+}
+
 screen.key(["f"], () => {
 	searchBox.show();
 	searchBox.focus();
 	screen.render();
 });
-screen.key(["q", "C-c"], () => process.exit(0));
+function exitApp() {
+	if (searchDebounceTimer) {
+		clearTimeout(searchDebounceTimer);
+	}
 
-list.on("select item", () => getStatus(services[list.selected]));
+	screen.destroy();
+	process.exit(0);
+}
+
+screen.key(["q", "C-c"], exitApp);
+
+list.on("select item", () => {
+	if (suppressListSelection) {
+		return;
+	}
+
+	getStatus(services[list.selected]);
+});
 
 list.focus();
-if (services.length > 0) getStatus(services[0]);
+if (services.length > 0) {
+	refreshServiceList(allServices, services[0]);
+	refreshServiceStatuses(allServices);
+	getStatus(services[0]);
+} else {
+	details.setContent(
+		"{yellow-fg}No services saved. Press [A] to add one.{/}",
+	);
+}
 screen.render();

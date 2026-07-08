@@ -14,9 +14,9 @@ Manage your system services with an intuitive TUI (Terminal User Interface) — 
 
 ```
 ┌─ Services ──────────────┐┌─ Status Output ────────────────────────────────┐
-│ > docker                ││ docker - Docker Application Container Engine   │
-│   ollama                ││ Active   : active (running) since...           │
-│   ssh                   ││ Disabled : no                                  │
+│ ◆ docker                ││ docker - Docker Application Container Engine   │
+│ ◆ ollama                ││ Active   : active (running) since...           │
+│ ◆ ssh                   ││ Disabled : no                                  │
 │                         ││ Masked   : no                                  │
 │                         ││ Main PID : 1234                                │
 │                         ││ Memory   : 45.2M                               │
@@ -74,30 +74,31 @@ node index.js
 
 - **Clean Terminal UI** — keyboard-driven interface built with blessed
 - **Quick Service Control** — start, stop, restart with a single keypress
-- **Real-time Status** — view service status, PID, and memory usage at a glance
+- **Real-time Status** — view service state, PID, memory, CPU, and task count at a glance
 - **Service Management** — enable, disable, mask, and unmask services
 - **Custom Watch List** — add and remove services you care about
 - **Secure** — password prompts for sudo operations, never stored or logged
+- **Validated Input** — service names are checked before being added to the watch list
 - **Mouse-free** — efficient keyboard navigation throughout
 
 ---
 
 ## Keyboard Shortcuts
 
-| Key | Action | Description |
-|-----|--------|-------------|
-| `a` | Add Service | Add a new service to your watch list |
-| `s` | Start | Start the selected service |
-| `r` | Restart | Restart the selected service |
-| `x` | Stop | Stop the selected service |
-| `e` | Enable | Enable the selected service at boot |
-| `d` | Disable | Disable the selected service at boot |
-| `m` | Mask | Mask the selected service |
-| `u` | Unmask | Unmask the selected service |
-| `Backsp` / `Del` | Delete | Remove service from watch list (with confirmation) |
-| `↑` / `↓` | Navigate | Move through the service list |
-| `Esc` | Cancel | Cancel input dialogs |
-| `q` / `Ctrl+C` | Quit | Exit the application |
+| Key              | Action      | Description                                        |
+| ---------------- | ----------- | -------------------------------------------------- |
+| `a`              | Add Service | Add a new service to your watch list               |
+| `s`              | Start       | Start the selected service                         |
+| `r`              | Restart     | Restart the selected service                       |
+| `x`              | Stop        | Stop the selected service                          |
+| `e`              | Enable      | Enable the selected service at boot                |
+| `d`              | Disable     | Disable the selected service at boot               |
+| `m`              | Mask        | Mask the selected service                          |
+| `u`              | Unmask      | Unmask the selected service                        |
+| `Backsp` / `Del` | Delete      | Remove service from watch list (with confirmation) |
+| `↑` / `↓`        | Navigate    | Move through the service list                      |
+| `Esc`            | Cancel      | Cancel input dialogs                               |
+| `q` / `Ctrl+C`   | Quit        | Exit the application                               |
 
 ---
 
@@ -105,7 +106,7 @@ node index.js
 
 T-Serve wraps `systemctl` commands under the hood:
 
-- **Status Display** — runs `systemctl status <service>` to fetch real-time info
+- **Status Display** — runs `systemctl show <service>` to fetch machine-readable info
 - **Service Control** — executes `systemctl start/stop/restart/enable/disable/mask/unmask <service>` with sudo
 - **Data Storage** — service watch list is persisted in a local `services.db` SQLite file, created automatically on first run
 - **Password Security** — uses `sudo -S` to securely handle password input via stdin
@@ -116,6 +117,7 @@ T-Serve wraps `systemctl` commands under the hood:
 
 - Passwords are entered via a censored input field (shown as asterisks)
 - Passwords are passed to sudo via stdin and never stored or logged
+- Service names are limited to systemd-safe characters before being saved
 - Always verify the service name before performing destructive operations
 
 ---
@@ -130,6 +132,7 @@ Ensure you have sudo privileges and enter the correct password when prompted.
 
 **"Service Not Found"**  
 Service names must match exactly as they appear in systemd. Run the following to see all available services:
+
 ```bash
 systemctl list-units --type=service
 ```
